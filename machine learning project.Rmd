@@ -1,0 +1,123 @@
+---
+title: "fitbit_data_analysis"
+author: "Antonio Bulla"
+date: '2022-11-20'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+library(caret)
+library(rpart)
+library(xgboost) 
+```
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+## Importing and cleaning Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+### Importing Data
+
+```{r}
+
+training_data <- read.csv("pml-training.csv", na.strings = c("NA", ""))
+testing_data <- read.csv("pml-testing.csv", na.strings = c("NA", ""))
+
+```
+
+### Removing useless columns and empty columns
+
+```{r}
+
+training_data <- training_data[, colSums(is.na(training_data)) == 0]
+testing_data <- testing_data[, colSums(is.na(testing_data)) == 0]
+
+training_data <- training_data[, -c(1:7)]
+testing_data <- testing_data[, -c(1:7)]
+
+```
+
+### Creating a validation set
+
+```{r}
+set.seed(612) 
+train <- createDataPartition(training_data$classe, p = 0.7, list = FALSE)
+training_set <- training_data[train, ]
+validation_set <- training_data[-train, ]
+```
+
+### Random Forest 
+
+```{r}
+
+fit_rf <- train(classe ~ ., data = training_set, method = "rf", 
+                   trControl = trainControl(method = "cv", number = 5))
+
+
+```
+
+### XGBoost 
+
+```{r}
+fit_xgb <- train(classe ~ ., data = training_set, metric = "Accuracy",
+  method = "xgbTree",
+  trControl = trainControl(method = "none"), tuneGrid = expand.grid(nrounds = 100, max_depth = 6, eta = 0.3, gamma = 0.01, colsample_bytree = 1, min_child_weight = 1, subsample = 1))
+```
+
+### Making predictions on validation set
+
+```{r}
+
+predict_xgb <- predict(fit_xgb, validation_set)
+predict_rf <- predict(fit_rf, validation_set)
+
+```
+
+### Calculating the confusion matrices
+
+```{r}
+
+actual <- validation_set$classe
+
+conf_rf <- table(actual, predict_rf)
+
+conf_xgb <- table( actual, predict_xgb)
+
+```
+
+### Comparing the accuracies of the two algorithms
+
+#### Random forest accuracy
+
+```{r}
+sum(diag(conf_rf)) / nrow(validation_set)
+
+```
+#### XGBoost accuracy
+
+```{r}
+
+sum(diag(conf_xgb)) / nrow(validation_set)
+
+```
+
+The accuracy of XGBoost is slight better than RF
+
+
+### Conclusion: The Final Prediction
+
+
+```{r}
+predict(fit_xgb, testing_data)
+```
+
